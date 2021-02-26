@@ -1,12 +1,12 @@
 # Basic
-title: 潘柏信
-subtitle: 个人站
-description: 欢迎来到我的个人站~
+title: GuoJ
+subtitle: 博客1.0
+description: 别跌了 别跌了，再跌人死了~
 # 头像里面的标题
-avatarTitle: leopardpan
+avatarTitle: 猫猫叹气
 # 头像里面的描述
-avatarDesc: iOS / 机器学习
-url: "https://leopardpan.cn"
+avatarDesc: eat & sleep
+url: "https://shineguo1.github.io"
 
 # 博客是否自动生成目录，false为不生成
 enableToc: true
@@ -14,30 +14,30 @@ enableToc: true
 # Comment
 comment:
     # livere: MTAyMC81MDk5NC8yNzQ3Ng  # https://www.livere.com
-    disqus: leopard
+#    disqus: leopard
     # uyan: 2143225  # 有言id,登录有言官网申请
 
 # Social
 social:
-    weibo: 5366874726 
-    github: leopardpan
-    # zhihu: panpanleopard
+    # weibo: =
+    github: shineguo1
+    # zhihu:
     # juejin: xxx
-    jianshu: 2ada30d8d0f7
+    # jianshu:
     # twitter: 
-    mail: leopardpan@icloud.com
+    mail: 1165291378@qq.com
 
 
 # 百度统计 
 # 使用博客模板请去掉或者更换 id 
 baidu:
-    id: 8ba1c6be0953b6f9c2ba38e57f615421  
+    id: a1f2011c35e420b701e160b40ad80038
 
 # Google Analytics
 # 使用博客模板请去掉或者更换 id
-ga:
-    id: UA-84134159-3  
-    host: auto  
+#ga:
+#    id: UA-84134159-3
+#    host: auto
 
 
 # 《----------------- 上面的信息修改成你自己的 ---------------------------》
@@ -67,8 +67,7 @@ blog_button:
 nav:
     - {title: 所有文章, description: archive, url: '/archive'}   
     - {title: 标签, description: tags, url: '/tags'}      
-    - {title: 技术支持, description: support, url: '/support'}      
-    - {title: 关于我, description: about, url: '/about'}   
+    - {title: 关于我, description: about, url: '/about'}
     
 
 # Pagination
