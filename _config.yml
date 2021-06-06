@@ -76,4 +76,7 @@ paginate: 20
 paginate_path: "page/:num/"
 
 
-exclude: [files]
+exclude: [
+  # 忽略文件夹，存在本地(utf-8)无法解析的字符
+  #  downloads
+]
