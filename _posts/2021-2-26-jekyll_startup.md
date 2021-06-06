@@ -22,6 +22,11 @@ $ gem install jekyll
 
 ```
 $ bundle install
+```
+3.1 如果出现 【Could not locate Gemfile】-，使用下面命令
+```
+$ bundle init
+
 
 ```
 

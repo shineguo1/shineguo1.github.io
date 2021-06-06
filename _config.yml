@@ -1,7 +1,7 @@
 # Basic
 title: GuoJ
 subtitle: 博客1.0
-description: 别跌了 别跌了，再跌人死了~
+description: 今天不学习，明天变辣鸡~
 # 头像里面的标题
 avatarTitle: 猫猫叹气
 # 头像里面的描述
@@ -76,3 +76,4 @@ paginate: 20
 paginate_path: "page/:num/"
 
 
+exclude: [files]
