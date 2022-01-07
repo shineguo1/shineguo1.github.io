@@ -1,7 +1,7 @@
 ---
 layout: post
 title: Redis深度历险
-date: 2021-08-20
+date: 2021-12-08
 tags: 计算机基础
 ---
 <!-- ### 电子书链接
@@ -118,3 +118,19 @@ OK
 - 在redis-cell基础上与延迟队列配合。当成功流入桶中时，将请求加入延迟队列，利用延迟队列来实现匀速流出。
 
 #### 9.GeoHash
+- 地理位置信息是经纬度的二维数组，GeoHash算法把地图分割成一个个小方块，将二维数组简化成一维数组。
+- 详细原理：[https://zhuanlan.zhihu.com/p/35940647](https://zhuanlan.zhihu.com/p/35940647)
+- API介绍：[https://www.runoob.com/redis/redis-geo.html](https://www.runoob.com/redis/redis-geo.html)
+
+#### 10.Scan（查找符合正则的key）
+- 原生keys命令缺点：1. 没有limit offset 2.复杂度O(n)且会阻塞进程
+- redis2.8支持Scan命令：`SCAN cursor [MATCH pattern] [COUNT count]`
+> 1. 复杂度虽然也是 O(n)，但是它是通过游标分步进行的，不会阻塞线程;
+> 2. 提供 limit 参数，可以控制每次返回结果的最大条数，limit 只是一个 hint，返回的结果可多可少;
+> 3. 同 keys 一样，它也提供模式匹配功能;
+> 4. 服务器不需要为游标保存状态，游标的唯一状态就是 scan 返回给客户端的游标整数;
+> 5. 返回的结果可能会有重复，需要客户端去重复，这点非常重要;
+> 6. 遍历的过程中如果有数据修改，改动后的数据能不能遍历到是不确定的;
+> 7. 单次返回的结果是空的并不意味着遍历结束，而要看返回的游标值是否为零;
+
+- 扩展阅读：[美团针对Redis Rehash机制的探索和实践](https://mp.weixin.qq.com/s/ufoLJiXE0wU4Bc7ZbE9cDQ)
