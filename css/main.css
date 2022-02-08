@@ -222,7 +222,7 @@ table {
   line-height: 40px;
   border: 2px solid #363636;
   width: 90%;
-  margin: 50px auto; }
+  margin: 0px auto; }
 
 thead tr:first-child {
   background-color: #E0EEEE;
