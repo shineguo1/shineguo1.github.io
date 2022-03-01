@@ -243,7 +243,7 @@ th:first-child, td:first-child {
 }
 
 tbody td {
-  font-size: .85em; 
+  /*font-size: .85em;*/
   border: 1px solid #363636;
 }
 td:last-child {
