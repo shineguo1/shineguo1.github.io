@@ -1,6 +1,6 @@
 ---
 layout: post
-title: Redis深度历险
+title: 《Redis深度历险》学习笔记
 date: 2021-12-08
 tags: 计算机基础
 ---
@@ -101,7 +101,7 @@ OK
 #### 7.限流：令牌桶算法（原书中的漏斗限流）
 - 原书说是漏桶限流算法，但redis-cell不能做到匀速流出，只是能匀速生产令牌。
 > 漏桶算法与令牌桶算法的区别：
-> - 漏桶算法是调用方将请求(水滴)放入桶中，主机匀速向网络上发送数据包，控制平滑的网络流量。即使遇到突发流量，也会被存储起来，匀速消费。
+> - 漏桶算法是调用方将请求(水滴)放入桶中，主机匀速向网络上发送数据包，控制平滑的网络流量。即使遇到突发流量，也会被客户端存储起来，匀速生产请求。
 > - 令牌桶算法是服务方匀速向网络上提供令牌，获得令牌立即能获得服务，能控制平均网络流量，但允许出现突发流量将令牌一抢而空造成峰值的状态。
 
 - 强行限制速率，平滑网络突发流量。
@@ -302,7 +302,7 @@ if pid < 0:
   
 ### 五、拓展
 #### 1. Stream
-![](/images/redis深度历险/redis-stream.png){:height="500px" style="margin:initial"}
+![](/images/redis深度历险/redis-stream.png){:height="400px" style="margin:initial"}
 - redis5.0新特性。
 - 支持多播的可持久化的消息队列，作者说借鉴了kafka。
 - stream结构如上图所示，一个消息链表+多个消费组。每个消费组内有多个消费者。每个消费者维护自己未ack的id数组。
@@ -382,8 +382,126 @@ if pid < 0:
    
   - redis的近似LRU实现原理：redis给每个key增加24bit长度，记录最近访问时间戳。每次执行写操作，如果发现超出maxmemory，就随机抽样出5个key(数量可配置)，淘汰最旧的，如果内存仍不够，继续这个操作。这个算法不用改变redis原本的数据结构(key)，只会消耗少量内存(24bit per key)。
   
-#### 6. 懒惰删除
+#### 6. 懒惰删除（lazyFree，异步）
+  - Redis的网络分发、执行命令在主线程，但厚重的io比如关闭文件、刷盘还是会在后台有单独的bio线程。
+  - Redis4.0添加lazyFree线程，在后台异步处理删除工作。
+  - 背景：redis指令删除大对象，如有千万元素的key，del同步操作会造成卡顿。
+  - unlink指令：将key丢到后台异步回收内存。当执行unlink时，目标key已经逻辑删除，不会被主线程访问到，所以是线程安全的。如果unlink的对象是个小对象，会立即回收内存（与 del一致）。
+  - flush指令：flushdb、flushall也是极缓慢的操作，可以在后面加上async，即`flushdb async`，扔给后台慢慢清理。
+  - 异步队列：主线程会将lazyFree的对象包装成一个任务，丢进异步任务队列。lazyFree线程读取这个队列。这个队列被主线程和lazyFree线程同时操作，所以必须是线程安全的数据结构。
+  - AOF Sync：redis每秒一次同步AOF日志到磁盘。它也是个很慢操作，自己有一个单独的线程，不影响主线程效率。
+  - 其他可配置异步删除点：<br/>
+  slave-lazy-flush：slave接收完RDB文件后清空数据选项<br/>
+  lazyfree-lazy-eviction：内存满逐出选项<br/>
+  lazyfree-lazy-expire：过期key删除选项<br/>
+  lazyfree-lazy-server-del：内部删除选项，比如rename srckey destkey时，如果destkey存在需要先删除destkey<br/>
+  以上4个选项默认为同步删除，可以通过config set [parameter] yes打开后台删除功能。
+  - 引用：《redis4.0之lazyfree》 [https://developer.aliyun.com/article/205504](https://developer.aliyun.com/article/205504)
   
   
-  
-  
+#### 7. Jedis
+- jedis客户端线程不安全，一般配合jedisPool连接池。使用完后要归还连接（close）。
+- 代码控制重试。
+
+#### 8. 保护redis
+- 指令安全：可以使用`rename-command`指令把影响性能的指令重命名成更复杂的形式，如`rename-command keys keysKeysKyes`，避免手误打错。
+- 端口安全：默认端口*:6379。为防止黑客攻击，应绑定监听ip，只允许白名单ip连接。还可以要求使用`auth`指令进行身份认证（从库需要配置masterauth）。
+- LUA脚本安全：应禁止用户输入内容（UGC）生产LUA脚本。应让redis以普通用户权限启动，这样即使被黑客攻击，也不会泄露root权限。
+- SSL代理：redis不支持SSL连接，需要使用SSL代理，如SSH，官方推荐spiped。
+
+#### 9. redis安全通信(spiped)
+- 内容为spiped的原理和使用介绍，略
+
+### 六、源码（数据结构）
+#### 1. 『字符串』内部结构
+
+```
+struct SDS<T> {
+ T capacity; // 数组容量（最小int8 1byte）
+ T len; // 数组长度（最小int8 1byte）
+ byte flags; // 特殊标识位，不理睬它（1byte）
+ byte[] content; // 数组内容（capacity byte）
+}
+
+struct RedisObject {
+ int4 type; // 4bits
+ int4 encoding; // 4bits
+ int24 lru; // 24bits
+ int32 refcount; // 4bytes
+ void *ptr; // 8bytes，64-bit system
+} robj; //总共16bytes
+```
+- 字符串的结构体是SDS，类似于java的ArrayList，capacity是content最大容量(可扩展)，len是字符串实际长度。
+- 泛型T的意义是可以根据字符串长度选择byte、short、int数据类型，最大程度节省内存。
+![](/images/redis深度历险/redis-string.png){:height="200px" style="margin:initial"}
+- 字符串在内存中的存储方式有两种(embstr/raw)。字符串在内存中分为redis对象头和SDS对象2个部分，redis对象头包含一个ptr指针指向实际SDS对象。embstr是redis对象头和SDS在内存中地址连续，使用malloc分配一次内存产生；raw是redis对象头和SDS在内存中地址不连续，需要使用malloc分配2次内存。
+- 字符串长度≤44时使用embstr，大于44时使用raw，原因如下：内存分配的单位大小通常都是2的幂，这里选择64字节作embstr和raw的分界点。RedisObject头大小为16字节，SDS大小为字符串容量+3字节，字符串content中包含结束符\'\0\'1字节，所以总共可用长度为64-16-3-1=44字节。
+
+#### 2. 『字典』内部结构
+- 数据结构：
+  类似java的hashMap，略过。
+  redisDB全局存了所有key的键值和过期时间：一个是<key,value>,另一个是<key,expireTime>。
+- 扩容
+- 缩容
+
+#### 3. 『压缩列表』内部结构
+- 压缩列表是一块连续内存，没有冗余间隙。zset和hash在元素较小时会采用ziplist存储，节省内存。
+- 数据结构：![](/images/redis深度历险/zipList.png){:height="270px" style="margin:initial"}
+- entry结构：字符串长度小于254(0xFE)时，prevlen长度为1byte；字符串长度≥254(0xFE)时，prevlen长度为5byte，结构为0xFE(固定字节)+4个字节表示长度。
+![](/images/redis深度历险/zipList-entry.png){:height="100px" style="margin:initial"}
+- 扩容：ziplist没有冗余空间，增加元素必须realloc重新分配内存再拷贝或在原基础上扩展。如果ziplist很大，重新分配内存性能消耗很大，所以ziplist只在小元素、少元素的情况下使用。
+
+#### 4. 『快速列表』内部结构
+- 上文说到元素的列表适合用zipList，普通列表适合用linkedList(双向列表)，两者混合就是quickList(快速列表)。
+- 3.2之后list键使用quickList代替zipList和linkedList。
+- quickList主要为了解决zipList重新分配内存问题。
+- 数据结构：zipList可压缩成quicklistLZF。参数 list-compress-depth 默认是0。1表示首尾各1个不压缩，2表示首尾各2个不压缩，以此类推。
+<!-- ![](/images/redis深度历险/quickList.png){:height="200px" style="margin:initial"} -->
+![](https://hunter-image.oss-cn-beijing.aliyuncs.com/redis/quicklist/QuickList.png){:height="400px" style="margin:initial"}
+- 详细说明：《Redis数据结构——快速列表(quickList)》[https://www.cnblogs.com/hunternet/p/12624691.html](https://www.cnblogs.com/hunternet/p/12624691.html)
+
+#### 5. 『跳表』内部结构
+#### 6. 『紧凑列表』内部结构
+- redis5.0新增数据结构，目前只用在stream中（因为ziplist应用太广了，替换起来非常麻烦）。
+- 目的：为了解决zipList级联更新(prevlen)和quickList额外空间开销(quicklistNode)问题。
+- 数据结构：listpack可以通过total_bytes和最后一个lpentry最后一个字段length计算出最后一个entry的起始位置，所以省去了zltail_offset字段。
+![](/images/redis深度历险/listpack.png){:height="300px" style="margin:initial"}
+- entry结构：用当前节点长度length代替了前一节点长度prevlen，并且顺序调整到了最后。这样可以达到避免级联更新和省略zltail_offset字段2个目的。
+![](/images/redis深度历险/lpentry.png){:height="100px" style="margin:initial"}
+
+#### 7. 『基数树』内部结构
+![](/images/redis深度历险/raxTree.png){:height="300px" style="margin:initial; display:inline-block"}
+![](/images/redis深度历险/raxTree2.png){:height="300px" style="margin:initial; display:inline-block"}
+- RAX(radix tree)叫做基数树（前缀压缩树），就是有相同前缀的字符串，其前缀可以作为一个公共的父节点。
+- Redis的stream的Id是时间戳+序号，使用rax结构可以快速定位消息。
+- 子节点只有一个的节点叫压缩节点，如上右图。压缩节点的路由是一个字符串，非压缩节点的路由是一个字符。
+- 压缩节点结构：
+
+```
+struct raxNode {
+ int<1> isKey; // 是否没有 key，没有 key 的是根节点
+ int<1> isNull; // 是否没有对应的 value，无意义的中间节点
+ int<1> isCompressed; // 是否压缩存储，这个压缩的概念比较特别
+ int<29> size; // 子节点的数量或者是压缩字符串的长度 (isCompressed)
+ byte[] data; // 路由键、子节点指针、value 都在这里
+} //节点结构
+
+struct data {
+ optional struct { // 取决于 header 的 size 字段是否为零
+  byte[] childKey; // 路由键
+  raxNode* childNode; // 子节点指针
+  } child;
+  optional string value; // 取决于 header 的 isNull 字段
+ } //压缩节点data字段结构
+```
+![](/images/redis深度历险/zipNode.png){:height="250px" style="margin:initial"}
+- 非压缩节点结构：
+```
+struct data {
+ byte[] childKeys; // 路由键字符列表
+ raxNode*[] childNodes; // 多个子节点指针
+ optional string value; // 取决于 header 的 isNull 字段
+} //非压缩节点data字段结构
+```
+![](/images/redis深度历险/non-zipNode.png){:height="300px" style="margin:initial"}
+
