@@ -223,7 +223,7 @@ table {
   line-height: 40px;
   border: 2px solid #363636;
   width: 90%;
-  margin: 50px auto; }
+  margin: 0px auto; }
 
 thead tr:first-child {
   background-color: #E0EEEE;
@@ -244,7 +244,7 @@ th:first-child, td:first-child {
 }
 
 tbody td {
-  font-size: .85em; 
+  /*font-size: .85em;*/
   border: 1px solid #363636;
 }
 td:last-child {
