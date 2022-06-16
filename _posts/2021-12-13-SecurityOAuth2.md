@@ -28,6 +28,7 @@ tags: 计算机基础
 - AuthorizationServerSecurityConfigurer：访问安全配置。AuthorizationServerConfigurerAdapter的3个configure之一。提供访问权限、client加密方式、token过滤链等配置。
 - AuthorizationServerEndpointsConfigurer：访问端点配置。能够装载TokenEndpoint和AuthorizationEndpoint的属性，包括AuthorizationServer、TokenServices、TokenStore、ClientDetailsService、UserDetailsService和redirectResolver、自定义回调页面等。
 - ClientDetailsServiceConfigurer：客户端配置。配置客户端数据，包含内存型、jdbc型、ClientDetailsService自定义型三种。
+- AuthorizationCodeService 授权码grant_code存储库，存储授权码和登录认证信息OAuth2Authentication的关系，包含内存型，jdbc型，random型(base类，可自行扩展成redis等)
 - TokenStore：accessToken存储库。包含内存型、jdbc型、jwt型、jwk型、redis型5种，也可自行扩展。
 - AuthorizationEndpoint：client申请权限及用户授权的端点。
 - TokenEndpoint：用户授权后创建accessToken，及刷新accessToken的端点。
@@ -227,6 +228,7 @@ public OAuth2AccessToken createAccessToken(OAuth2Authentication authentication) 
 ### 四、OAUTH2实践问题记录：授权码模式
 
 1. `/oauth/authorize`接口没有跳转登录页面，显示堆栈报错
+
 ```
 {"@type":"java.lang.RuntimeException","localizedMessage":"请求访问：/error，认证失败，无法访问系统资源","message":"请求访问：/error，认证失败，无法访问系统资源","stackTrace":
 ```
@@ -236,6 +238,7 @@ public OAuth2AccessToken createAccessToken(OAuth2Authentication authentication) 
 原因：`.sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)`取消了session缓存认证信息，又没有实现token认证，导致服务器无法记住用户认证状态。
 
 3. 使用accessToken获取资源报Unauthorized错误（拥有scope）
+
  ```
    {
        "timestamp": "2021-12-23T02:45:39.440+0000",
@@ -256,10 +259,13 @@ public OAuth2AccessToken createAccessToken(OAuth2Authentication authentication) 
  解法：(1) 可以在token端配置client时去掉resourceId。(2) 可以在resourceServer配置加上resourceId。
 
 
-4.  使用accessToken获取资源无scope权限
+5.  使用accessToken获取资源无scope权限
+
+```
 {
     "error": "insufficient_scope",
     "error_description": "Insufficient scope for this resource",
     "scope": "pay"
 }
+```
 
