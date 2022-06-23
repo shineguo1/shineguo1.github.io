@@ -59,7 +59,7 @@ tags: 计算机基础
 1. lamda架构
 - 使用双框架，流处理实时但不准确，批处理准确但延迟时间长。
 - 使用流处理实时更新中间数据（低延迟），到某个时间点换成批处理的最终数据（准确率）。
-![](/images/apacheFlink/flnik-lamda.png){:height="500px" style="margin:initial"}
+![](/images/apacheFlink/flink-lamda.png){:height="300px" style="margin:initial"}
 
 2. Flnik
 - 高吞吐、低延迟、结果准确、状态一致性、能与众多常用存储系统连接、高可用、动态扩展
@@ -97,6 +97,180 @@ tags: 计算机基础
     <artifactId>flink-runtime-web_2.12</artifactId>
     <version>${flink.version}</version>
 </dependency>
+<dependency>
+    <groupId>org.apache.flink</groupId>
+    <artifactId>flink-table-api-java-bridge_2.12</artifactId>
+    <version>${flink.version}</version>
+</dependency>
+
 ```
 
-#### 2. 批处理
+#### 2. 批处理 & 3. 流处理
+见demo
+
+### 三、部署（略）
+### 四、运行时架构
+#### 1. 系统架构
+![](/images/apacheFlink/flink-architecture.png){:height="500px" style="margin:initial"}
+
+
+#### 2. 作业管理器(JobManager)
+- 控制一个应用程序执行的主进程，是Flink集群中任务管理和调度的核心。
+
+1. JobMaster（一般一个）
+- JobMaster是JobManager中最核心的组件，负责处理单独的作业 (Job)。
+- 在作业提交时，JobMaster会先接收到要执行的应用。一般是由客户端提交来的，包括: Jar包，数据流图(dataflow graph)，和作业图(JobGraph)。
+- JobMaster会把JobGraph转换成一个物理层面的数据流图，这个图被叫作"执行图”(ExecutionGraph)，它包含了所有可以并发执行的任务。JobMaster会向资源管理器(ResourceManager）发出请求，申请执行任务必要的资源。一旦它获取到了足够的资源，就会将执行图分发到真正运行它们的TaskManager上。
+- 在运行过程中，JobMaster会负责所有需要中央协调的操作，比如说检查点(checkpoints)的协调。
+
+2. 资源管理器(ResourceManager，一个)
+-  ResourceManager主要负责资源的分配和管理，在Flink集群中只有一个。所谓“资源"”，主要是指TaskManager的任务槽(task slots)。任务槽就是Flink集群中的资源调配单元，包含了机器用来执行计算的一组CPU和内存资源。每一个任务(Task)都需要分配到一个slot上执行。
+
+3. 分发器(Dispatcher)
+- Dispatcher主要负责提供一个REST接口，用来提交应用，并且负责为每一个新提交的作业启动一个新的JobMaster组件。Dispatcher也会启动一个Web UI，用来方便地展示和监控作业执行的信息。Dispatcher在架构中并**不是必需的**，在不同的部署模式下可能会被忽略掉。
+
+4. 任务管理器(TaskManager, 多个)
+- Flink中的工作进程。通常在Flink中会有多个TaskManager运行，每个TaskManager都包含了一定数量的插槽（slots)。插槽的数量限制了TaskManager 能够并行处理的任务数量。
+- 启动之后，TaskManager 会向资源管理器注册它的插槽；收到资源管理器的指令后，TaskManager 就会将一个或者多个插槽提供给JobMaster调用。JobMaster 就可以向插槽分配任务(tasks）来执行了。
+- 在执行过程中，一个TaskManager 可以跟其它运行同一应用程序的TaskManager交换数据。
+
+#### 3. 作业提交流程
+1. standalone模式作业提交流程
+![](/images/apacheFlink/flink-jobsubmit-standalone.png){:height="350px" style="margin:initial"}
+
+2. yarn会话模式作业提交流程
+![](/images/apacheFlink/flink-jobsubmit-yarn.png){:height="350px" style="margin:initial"}
+
+3. yarn单作业模式作业提交流程
+![](/images/apacheFlink/flink-jobsubmit-yarn2.png){:height="350px" style="margin:initial"}
+
+#### 4. 重要概念
+- 思考
+    - 怎样从Flink程序得到任务?
+    - 一个流处理程序，到底包含多少个任务?
+    - 最终执行任务，需要占用多少slot?
+
+1. 数据流图(dataflow)
+- 在运行时，Flink上运行的程序会被映射成“逻辑数据流”(dataflows)，它包含了source、transformation、sink这三部分
+- 每一个dataflow以一个或多个sources开始以一个或多个sinks结束。dataflow类似于任意的有向无环图(DAG)
+- 在大部分情况下，程序中的转换运算(transformations)跟dataflow中的算子(operator）是——对应的关系
+![](/images/apacheFlink/flink-dataflow.png){:height="400px" style="margin:initial"}
+
+2. 并行度(parallelism)
+- 每一个算子(operator)可以包含一个或多个子任务(operator subtask)，这些子任务在不同的线程、不同的物理机或不同的容器中完全独立地执行。
+- 一个特定算子同时处理多个子任务(subtask)，叫做数据并行（通过拷贝一个算子镜像）。子任务的个数被称之为其并行度(parallelism)。
+- 区别：多个算子分别处理多个子任务叫任务并行。
+- coding `setParallelism(int parallelism)`
+![](/images/apacheFlink/flink-parallel.png){:height="400px" style="margin:initial"}
+
+3. 算子链（Operator Chain）
+- 算子间数据传输关系：one-to-one，一对一关系。redistributing，重分区。
+- 如上图，source->map 是 one-to-one 关系，map->keyBy 是 redistributing 关系。
+- 一种称为任务链的优化技术：将两个或多个算子设为相同的并行度，并通过本地转发(local forward)的方式进行连接，达到减少本地通信的开销目的。
+- 合并算子(task)的条件：必须是one-to-to操作，必须并行度相同。合并后形成新task，原来的算子称为里面的subtask。
+- 如上图，source->map可以合并，map->keyBy不能合并（redistributing），keyBy->sum不能合并（并行度不统一）
+
+4. 执行图(ExecutionGraph)
+- Flink 中的执行图可以分成四层: StreamGraph -> JobGraph -> ExecutionGraph -> 物理执行图
+    - StreamGraph:是根据用户通过Stream API编写的代码生成的最初的图。用来表示程序的拓扑结构。
+    - JobGraph: StreamGraph经过优化后生成了JobGraph，提交给JobManage的
+    - 数据结构。主要的优化为，将多个符合条件的节点chain在一起作为一个节点ExecutionGraph: JobManager 根据JobGraph生成ExecutionGraph。
+    - ExecutionGraph是JobGraph的并行化版本，是调度层最核心的数据结构。
+    - 物理执行图: JobManager根据ExecutionGraph 对Job进行调度后，在各个TaskManager上部署Task 后形成的“图"，并不是一个具体的数据结构。
+
+5. 任务槽(task slots)
+- 任务和任务槽
+    - Flink中每一个TaskManager都是一个JVM进程，它可能会在独立的线程上执行一个或多个子任务
+    - 为了控制一个TaskManager 能接收多少个task，TaskManager通过task slot来进行控制（一个TaskManager至少有一个slot)
+- 默认情况下，Flink 允许不同的算子（子任务）共享slot。这样的结果是，一个slot可以保存作业的整个管道。
+- 当我们将资源密集型和非密集型的任务同时放到一个slot中，它们就可以自行分配对资源占用的比例，从而保证最重的活平均分配给所有的TaskManager。
+![](/images/apacheFlink/flink-slot-share.png){:height="400px" style="margin:initial"}
+- 如上图，算子链的并行度有6，每个并行度分配一个槽位，并行中一整条作业管道的算子共享一个槽位。
+
+
+#### 5. 任务调度
+- coding
+
+```
+//禁用(合并)算子链。当前算子不能和前后任何算子合并算子链。
+SingleOutputStreamOperator<T> disableChaining();
+
+//开启新算子链。当前算子不能和后面的算子合并算子链（后面是新链）。
+SingleOutputStreamOperator<T> startNewChain();
+```
+
+### 四、DataStream API
+slotSharingGroup 算子共享组
+
+#### 1. 概述
+- 一个Flink程序，其实就是对DataStream的各种转换。具体来说，代码基本上都由以下几部分构成，如下所示:
+1. 获取执行环境(execution environment)
+2. 读取数据源(source)
+3. 定义基于数据的转换操作(transformations)
+4. 定义计算结果的输出位置(sink)
+5. 触发程序执行(execute)
+
+
+#### 2. 执行环境(execution environment)
+1. 创建环境的方法  [**Environment.java**](https://github.com/shineguo1/springDemo/blob/master1/src/main/java/gxj/study/demo/flink/Environment.java)
+
+```
+/*
+    1. 1.12版本前兼容
+    静态类：
+    StreamExecutionEnvironment 返回流处理环境，操作DataStream
+    ExecutionEnvironment       返回批处理环境，操作DataSet
+    工厂方法：
+    getExecutionEnvironment：智能地根据本地运行或jar包，返回本地环境或命令提交的集群环境。
+    createLocalEnvironment：返回本地环境
+    createRemoteEnvironment：返回集群环境，需指定参数jobManager的地址和端口、远程运行的jar包。
+*/
+StreamExecutionEnvironment.getExecutionEnvironment();
+StreamExecutionEnvironment.createLocalEnvironment();
+StreamExecutionEnvironment.createRemoteEnvironment("localhost",8888,"xxxx.jar","xxxx.jar");
+
+ExecutionEnvironment.getExecutionEnvironment();
+
+/*
+    2. 1.12版本后DataStream兼容流式和批式
+    代码设置：(硬编码，灵活性差)
+    RuntimeExecutionMode: STREAMING流式，BATCH批式，AUTOMATIC自动根据有无边界选择流式或批式。
+    命令行设置：
+    bin/flink runf -Dexecution.runtime-mode=BATCH ...
+*/
+StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+env.setRuntimeMode(RuntimeExecutionMode.STREAMING);
+env.setRuntimeMode(RuntimeExecutionMode.BATCH);
+env.setRuntimeMode(RuntimeExecutionMode.AUTOMATIC);
+```
+
+2. 既然存在有界流，为什么还要保留Mode.Batch？
+- 流数据：Batch 不能处理流数据，所以流数据用Stream。
+- 批数据：Stream的有界流处理数据时，没接受一个数据就会产生一次输出。但中间过程的数据对我们是多余的，直接输出最终结果会更高效，所以选择Batch。
+
+
+#### 3. 源算子（source）
+1. 约定接口 SourceFunction
+- 方法：run - 开始读数据
+- 方法：cancel - 终止读数据
+- flink提供的方法举例，这里的env指代StreamExecutionEnvironment
+        - env.readTextFile 创建了 ContinuousFileMonitoringFunction
+        - env.socketTextStream 创建了 SocketTextStreamFunction
+
+2. Pojo类可以作为DataStream的泛型, Flink认定的POJO类型标准：
+    1. 类是公有(public）的
+    2. 有一个无参的构造方法
+    3. 所有属性都是公有（public）的
+    4. 所有属性的类型都是可以序列化的
+
+3. 引入source的方法([**Source.java**](https://github.com/shineguo1/springDemo/blob/master1/src/main/java/gxj/study/demo/flink/Source.java))
+    - 读socket文本流
+    - 读集合
+    - 读元素
+    - 读文件
+    - 读kafka
+    - 自定义数据源  - 直接实现SourceFunction接口的数据源并行度只能是1
+    - 自定义并行数据源  - 实现 ParallelSourceFunction 接口，允许设置并行度
+
+#### 4. transfer
+#### 5. sink
