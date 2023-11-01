@@ -258,7 +258,7 @@ env.setRuntimeMode(RuntimeExecutionMode.AUTOMATIC);
         - env.socketTextStream 创建了 SocketTextStreamFunction
 
 2. Pojo类可以作为DataStream的泛型, Flink认定的POJO类型标准：
-    1. 类是公有(public）的
+    1. 类是公有(public）的[文件：sushiPool.js]
     2. 有一个无参的构造方法
     3. 所有属性都是公有（public）的
     4. 所有属性的类型都是可以序列化的
@@ -274,3 +274,84 @@ env.setRuntimeMode(RuntimeExecutionMode.AUTOMATIC);
 
 #### 4. transfer
 #### 5. sink
+
+### 五、窗口
+#### 1. 概述
+1. Window：Window是处理无界流的关键，Windows将流拆分为一个个有限大小的buckets，可以可以在每一个buckets中进行计算
+2. start_time,end_time：当Window时时间窗口的时候，每个window都会有一个开始时间和结束时间（前开后闭），这个时间是系统时间
+3. event-time: 事件发生时间，是事件发生所在设备的当地时间，比如一个点击事件的时间发生时间，是用户点击操作所在的手机或电脑的时间
+4. Watermarks：可以把他理解为一个水位线，等于evevtTime - delay(比如规定为20分钟)，一旦Watermarks大于了某个window的end_time，就会触发此window的计算，Watermarks就是用来触发window计算的。
+
+#### 2. 算子
+1. evitor：清理器，用于窗口执行计算函数前后移除窗口内元素（如计算后移除已计算的数据）。
+
+#### 3. QA
+
+> 1. 为什么设置了水位线，没有进入trigger的onEventTime事件，窗口函数没有触发？
+> 答：i. 发送水位线：
+> -  新元素进入时，触发 `org.apache.flink.streaming.runtime.streamstatus.StatusWatermarkValve#findAndOutputNewMinWatermarkAcrossAlignedChannels`函数，检查`channelStatuses`的水位线最小值。如果大于lastOutputWatermark，那么就更新lastOutputWatermark的值，并emit一个新的水位线。
+> - `channelStatuses`是全部并行线程的集合。算子的并行度有多少，集合的大小就有多少。所以倘若CPU线程数是8，那么默认并行度就是8，只有输入8个元素后，`channelStatuses`才会填满，且发出的第一条水位线是第1个元素而不是第8个元素（假如输入的元素是升序的）。`InputChannelStatus`默认的水位线是`Long.MIN_VALUE`,所以如果输入的元素数量不到并行度，算子的水位线就是无穷小，不会触发trigger的onEventTime.
+> ii. 触发timer 
+> - 新元素进入时，触发trigger的onElement事件，ctx.registerEventTimeTimer函数，会往`org.apache.flink.streaming.api.operators.InternalTimerServiceImpl#eventTimeTimersQueue`里注册一个timer。
+> - JobManager触发timer，`org.apache.flink.streaming.api.operators.InternalTimerServiceImpl#advanceWatermark` 这里的入参time就是上面emit的水位线，`eventTimeTimersQueue`就是上面注册的timer。当存在timer小于time，就会触发trigger的onEventTime函数。所以窗口事件没有触发的另一个原因可能是算子发出的水位线还没有到达窗口的结束时间（算子发出的水位线是并行度数量的线程中的最小值）。
+> iii. 窗口
+> - trigger的onEventTime触发窗口process，但是此时窗口的elements和水位线是会继续接受WindowAssigner分发的元素。也就是说窗口内的元素和水位线是可以超过trigger触发的eventTime的。
+> - window的context拿不到trigger触发的时间戳。
+
+
+### 九、状态
+#### 1、状态类型
+1. 托管状态（Managed State）和原始状态（Raw State）。
+- 托管状态就是由 Flink 统一管理的，状态的存储访问、故障恢复和重组等一系列问题都由 Flink 实现，我们只要调接口就可以。托管状态是由 Flink 的运行时（Runtime）来托管的；在配置容错机制后，状态会自动持久化保存，并在发生故障时自动恢复。当应用发生横向扩展时，状态也会自动地重组分配到所有的子任务实例上。对于具体的状态内容，Flink 也提供了值状态（ValueState）、列表状态（ListState）、映射状态（MapState）、聚合状态（AggregateState）等多种结构，内部支持各种数据类型。聚合、窗口等算子中内置的状态，就都是托管状态；我们也可以在富函数
+类（RichFunction）中通过上下文来自定义状态，这些也都是托管状态。
+- 原始状态是自定义的，相当于就是开辟了一块内存，需要我们自己管理，实现状态的序列化和故障恢复。原始状态就全部需要自定义了。Flink 不会对状态进行任何自动操作，也不知道状态的具体数据类型，只会把它当作最原始的字节（Byte）数组来存储。我们需要花费大量的精力来处理状态的管理和维护。
+2. 算子状态（Operator State）和按键分区状态（Keyed State）
+- common：每个并行子任务维护着对应的状态，算子的子任务之间状态不共享。
+- 算子状态：算子的子任务实例共享状态
+- 按键分区状态：算子的子任务中相同key的数据共享状态
+
+#### 2. 支持的结构类型
+1. 值状态（ValueState）
+2. 列表状态（ListState）
+3. 映射状态（MapState）
+4. 归约状态（ReducingState）
+5. 聚合状态（AggregatingState）
+
+### 十、容错
+### 十一、TABLE API & SQL
+
+#### 1. 创建表环境
+
+```
+//1. 定于环境配置
+EnvironmentSettings settings = EnvironmentSettings.newInstance()
+        .inStreamingMode()
+        .useBlinkPlanner()
+        .build();
+//2. 创建表环境
+TableEnvironment tableEnv = TableEnvironment.create(settings);
+```
+
+#### 2. 函数
+1. talbeEnv.createTemporaryView 创建虚拟表(视图)，把table对象注册到tableEnv。
+#### 2. UDF 函数
+
+
+### 关联文档
+#### iceberg ddl
+https://iceberg.apache.org/docs/latest/spark-ddl/
+
+#### flink 官方文档（链接指向sql）
+https://nightlies.apache.org/flink/flink-docs-release-1.15/zh/docs/dev/table/sql/queries/overview/
+
+
+
+
+### 生产遭遇的问题
+1. state结合guava bloomFilter时，从检查点重跑报错：反序列化失败
+原因：guava BloomFilter策略里的LockFreeBitArray是原子性的（加锁的），它的原子性实现的类在kryo反序列时失败
+解决：使用flink包下shaded的BloomFilter，它使用非原子性的BitArray实现，是guava的简化版本。或者自己拷贝guava源码修复这个问题（这样做还可以顺便将guava哈希函数的64bit实现改成32bit实现，加快读写速度）。
+2. Charset.UTF-8 序列化失败（sun包下）
+原因：sun包下的utf-8没有pulblic构造方法
+解决：自己实现一个kryo的序列化器CharsetCustomNewSerializer(代码详见springDemo项目)，并注册进flink环境
+`env.getConfig().registerTypeWithKryoSerializer(Charset.forName("UTF-8").getClass(), CharsetCustomNewSerializer.class)`
