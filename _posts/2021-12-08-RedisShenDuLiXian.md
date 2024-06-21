@@ -12,6 +12,17 @@ tags: 计算机基础
 2. cmd进入文件目录，执行`redis-server.exe redis.windows.conf`启动服务端
 3. 再打开一个cmd进入文件目录，执行`redis-cli.exe -h 127.0.0.1 -p 6379`启动客户端
 
+### Ubuntu/debian安装
+- [redis.io/docs](https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/install-redis-on-linux/#install-on-ubuntudebian)
+```bash
+curl -fsSL https://packages.redis.io/gpg | sudo gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list
+
+sudo apt-get update
+sudo apt-get install redis
+```
+
 ### 一、Redis基础数据结构
 #### 1. String
 - 键值对：` SET key value [EX seconds] [PX milliseconds] [NX|XX]`、`GET key`
@@ -505,3 +516,83 @@ struct data {
 ```
 ![](/images/redis深度历险/non-zipNode.png){:height="300px" style="margin:initial"}
 
+### 后记1. linux-源码安装redis（指定版本）
+```bash
+# 1. CentOS(yum)更新包管理器，安装gcc
+sudo yum update -y
+sudo yum install -y gcc tcl
+
+# 2. Ubuntu(apt)更新包管理器，安装gcc
+sudo apt-update
+sudo apt-get install build-essential tcl 
+
+# 3. 下载Redis 6.2.6
+cd ~
+mkdir redis
+cd redis
+wget http://download.redis.io/releases/redis-6.2.6.tar.gz
+ 
+# 4. 解压缩
+tar xzf redis-6.2.6.tar.gz
+ 
+# 5. 编译Redis
+cd redis-6.2.6
+make
+ 
+# 6. 安装Redis
+sudo make install
+ 
+# 7. 运行Redis
+redis-server redis.conf
+
+# 8. 检查端口判断是否启动
+netstat -tunpl | grep 6379
+```
+
+### 后记、搭建redis集群
+1. 修改配置文redis.conf
+```bash
+#bind 127.0.0.1                        #注释调，不限制ip
+daemonize yes                          #后台启动
+protected-mode no                      #关闭保护模式
+cluster-enabled  yes                   #启用集群
+cluster-config-file  nodes_6379.conf   #集群配置文件首次启动自动生成
+cluster-node-timeout  15000            #超时时间
+## 单服务器多redis实例，拷贝一份redis.conf, 搜索所有6379, 把端口和文件名替换成新的端口号
+config set stop-writes-on-bgsave-error no #rdb失败，不阻塞写入数据
+```
+2. 启动单个服务：
+- 分别在每台服务器上启动 Redis 服务：
+- 集群需要至少3个主节点。假如设置备份1，至少需要6台redis-server实例。
+- 单服务器上启动多个redis-server实例，要注意修改配置文件，端口和输出的文件名不能重复
+```bash
+redis-server /path/to/redis.conf
+```
+
+3. 创建集群：
+- 在第一台服务器上执行以下命令创建 Redis 集群：
+```bash
+## 省略，需要6个node
+redis-cli --cluster create <node1-ip:port> <node2-ip:port> <node3-ip:port> --cluster-replicas 1
+```
+4. 验证集群：
+- 使用以下命令检查 Redis 集群状态：
+```bash
+redis-cli -c -h <node1-ip> -p <node1-port> cluster nodes
+```
+5. 测试集群：
+- 尝试在不同节点之间写入和读取数据，确保 Redis 集群正常工作。
+- 以上是搭建 Redis 集群的基本步骤，如果需要更详细的指导或遇到问题，您可以参考 Redis 官方文档或咨询相关专业人士。请记住在操作前做好必要的备份和安全性考虑。
+
+
+
+redis-cli --cluster create 172.31.39.163:6379 172.31.39.163:6380 172.31.32.71:6379 172.31.32.71:6380 172.31.81.251:6379 172.31.81.251:6380 --cluster-replicas 1
+
+
+netstat -tunpl|grep 63
+
+rm nodes-6379.conf 
+rm nodes-6380.conf
+
+sudo redis-server redis.conf 
+sudo redis-server redis_6380.conf 
