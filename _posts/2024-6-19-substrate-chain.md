@@ -13,6 +13,7 @@ tags: 区块链
 - 【Test】[quick_start_a_node](https://docs.substrate.io/quick-start/start-a-node/) 从`View information for the node`开始，可以验证节点模板。
 
 2. 安装yarn
+
 ```BASH
 # 安装node v14以上和npm
 # 官方只推荐用corepack管理和安装(yarn) https://yarnpkg.com/getting-started/install
@@ -79,6 +80,7 @@ yarn init -2
 ```
 
 4. Add keys to the keystore
+
 ```bash
 # aura密钥， 填充助记词
 # <your-secret-seed> e.g. --suri "pig giraffe ceiling enter weird liar orange decline behind total despair fly"
@@ -147,6 +149,7 @@ ls /tmp/node01/chains/my_custom_testnet/keystore
 ```
 
 ## 启动节点2
+
 ```bash
 # bootnodes 格式： /ip4/{node1-ip}/tcp/{node1-port}/p2p/{node1-identity-print-while-start}
 # ./customSpecRaw.json 文件必须与node1的原码文件一模一样，不然创世块会不同，随后加入失败。
