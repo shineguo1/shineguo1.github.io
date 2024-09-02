@@ -8,9 +8,9 @@ tags: 区块链
 
 ## 一、安装环境(Linux)
 1. 安装substrate
-- (/install/linux)[https://docs.substrate.io/install/linux/] 按此页命令顺序安装。
+- [install_linux](https://docs.substrate.io/install/linux/) 按此页命令顺序安装。
 - `clang curl git make` 报错不用管，后续命令会安装。
-- 【Test】(quick_start_a_node)[https://docs.substrate.io/quick-start/start-a-node/] 从`View information for the node`开始，可以验证节点模板。
+- 【Test】[quick_start_a_node](https://docs.substrate.io/quick-start/start-a-node/) 从`View information for the node`开始，可以验证节点模板。
 
 2. 安装yarn
 ```BASH
@@ -22,6 +22,7 @@ yarn init -2
 ```
 
 3. 清理数据库、生成密钥命令
+
 ```bash
 # remove database
 ./target/release/node-template purge-chain --base-path /tmp/node01 --chain customSpecRaw.json
@@ -33,12 +34,12 @@ yarn init -2
 ./target/release/node-template key generate --scheme Sr25519 --password-interactive
 # 通过助记词得到key
 ./target/release/node-template key inspect --scheme Ed25519 --password-interactive "code1 code2 ... coden"
-
 ```
 
 ## 集群启动 add trusted nodes
 1. 生成密钥（见上）
 2. 创建区块链定义文件
+
 ```bash
 # 从预设的local(development/staging)环境导出成json规格文件
 ./target/release/node-template build-spec --disable-default-bootnode --chain local > customSpec.json
@@ -106,6 +107,7 @@ ls /tmp/node01/chains/my_custom_testnet/keystore
 - ctrl c中断，然后用相同的命令启动即可
 
 6. add key script
+
 ```bash
 # node 1
 ./target/release/node-template key insert \
