@@ -523,7 +523,7 @@ sudo yum update -y
 sudo yum install -y gcc tcl
 
 # 2. Ubuntu(apt)更新包管理器，安装gcc
-sudo apt-update
+sudo apt update
 sudo apt-get install build-essential tcl 
 
 # 3. 下载Redis 6.2.6
@@ -559,7 +559,7 @@ cluster-enabled  yes                   #启用集群
 cluster-config-file  nodes_6379.conf   #集群配置文件首次启动自动生成
 cluster-node-timeout  15000            #超时时间
 ## 单服务器多redis实例，拷贝一份redis.conf, 搜索所有6379, 把端口和文件名替换成新的端口号
-config set stop-writes-on-bgsave-error no #rdb失败，不阻塞写入数据
+stop-writes-on-bgsave-error no #rdb失败，不阻塞写入数据
 ```
 2. 启动单个服务：
 - 分别在每台服务器上启动 Redis 服务：
@@ -579,11 +579,26 @@ redis-cli --cluster create <node1-ip:port> <node2-ip:port> <node3-ip:port> --clu
 - 使用以下命令检查 Redis 集群状态：
 ```bash
 redis-cli -c -h <node1-ip> -p <node1-port> cluster nodes
+redis-cli -c -h 172.31.56.10 -p 6379 cluster nodes
+
 ```
 5. 测试集群：
 - 尝试在不同节点之间写入和读取数据，确保 Redis 集群正常工作。
 - 以上是搭建 Redis 集群的基本步骤，如果需要更详细的指导或遇到问题，您可以参考 Redis 官方文档或咨询相关专业人士。请记住在操作前做好必要的备份和安全性考虑。
-
+6. 运维命令：
+```bash
+## 检查集群状态
+redis-cli --cluster check host:port
+## 修复槽位有问题的节点
+redis-cli --cluster fix host:port
+## 修复槽位有问题的节点，遇到冲突需要人工处理时，强制覆盖
+redis-cli --cluster fix host:port --cluster-replace
+## 添加新的主节点
+redis-cli --cluster add-node 新节点IP地址:端口号 现有节点IP地址:端口号 --cluster-master
+## 添加新的从节点
+redis-cli --cluster add-node 新节点IP地址:端口号 现有节点IP地址:端口号 --cluster-slave --cluster-master-id 主节点id
+```
+redis-cli --cluster reshard 172.31.56.10:6379
 
 
 redis-cli --cluster create 172.31.39.163:6379 172.31.39.163:6380 172.31.32.71:6379 172.31.32.71:6380 172.31.81.251:6379 172.31.81.251:6380 --cluster-replicas 1
