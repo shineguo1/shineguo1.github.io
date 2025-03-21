@@ -73,6 +73,7 @@ yarn init -2
   --rpc-port 9945 \
   --telemetry-url "wss://telemetry.polkadot.io/submit/ 0" \
   --validator \
+  --rpc-cors all \
   --rpc-methods Unsafe \
   --unsafe-rpc-external \
   --name MyNode01 \
@@ -160,8 +161,20 @@ ls /tmp/node01/chains/my_custom_testnet/keystore
   --rpc-port 9946 \
   --telemetry-url "wss://telemetry.polkadot.io/submit/ 0" \
   --validator \
+  --rpc-cors all \
   --rpc-methods Unsafe \
+  --unsafe-rpc-external \
   --name MyNode02 \
   --bootnodes /ip4/100.25.117.101/tcp/30333/p2p/12D3KooWC5sqd2ZBVAJ1fTBmUcmQWhTRHrchiPARgpVhUZuvwtQt \
   --password-interactive
+```
+
+## 其他配置
+- 出块速度、gas_limit等参数配置在 `./template/runtime/src/lib.rs`
+
+## evm适配
+
+```bash
+# frointer和substrate项目的package名字不一样，此处命令需要修改
+ cargo check -p frontier-template-runtime   --release
 ```

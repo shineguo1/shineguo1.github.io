@@ -2,7 +2,7 @@
 layout: post
 title: Spring-Security-Oauth2.0
 date: 2021-12-13
-tags: 计算机基础
+tags: java实践
 ---
 
 ### 文档链接
